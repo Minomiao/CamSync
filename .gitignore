@@ -1,0 +1,76 @@
+# Python
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+dist-ssr/
+build/eggs/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# 通常会在根目录生成的文件
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 测试覆盖报告
+coverage.xml
+*.cover
+*.py,cover
+.coverage
+.pytest_cache/
+
+# 环境变量
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 编辑器目录和文件
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 操作系统文件
+Thumbs.db
+
+# 日志文件
+logs/
+*.log
+
+# 虚拟环境
+.venv/
+env/
+venv/
+ENV/
+
+# Windows 可执行文件
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 缓存
+__pycache__/
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
