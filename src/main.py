@@ -289,7 +289,7 @@ class CamSyncApp(QMainWindow):
             self.update_log(f"在设备上未找到目标文件夹\n")
     
     def process_detected_folders(self, device_path, folders):
-        # 处理检测到的文件夹（这里是简化版本，后续会实现完整的配置和文件操作流程）
+        # 处理检测到的文件夹
         for folder in folders:
             # 获取或创建配置
             config = self.config_manager.get_folder_config(device_path, folder)
@@ -300,18 +300,34 @@ class CamSyncApp(QMainWindow):
             
             # 根据配置决定操作
             if config['backup_strategy'] != 'none':
-                # 预览文件
-                if config['preview_before_copy']:
-                    files_to_copy = self.file_operations.get_files_to_copy(
-                        os.path.join(device_path, folder), 
-                        os.path.join(self.config_manager.get_backup_path(), folder),
-                        config['backup_strategy'] == 'incremental'
-                    )
-                    
-                    if files_to_copy:
+                # 获取所有文件列表
+                all_files = self.file_operations.get_files_to_copy(
+                    os.path.join(device_path, folder), 
+                    os.path.join(self.config_manager.get_backup_path(), folder),
+                    False  # 获取所有文件，不进行增量过滤
+                )
+                
+                # 从配置中获取已保存和未保存的文件列表
+                saved_files = config.get('saved_files', [])
+                unsaved_files = config.get('unsaved_files', [])
+                
+                # 提取所有文件的源路径
+                all_file_paths = [src_path for src_path, _ in all_files]
+                
+                # 过滤掉已保存和未保存的文件，只保留新文件
+                new_files = []
+                for src_path, dest_path in all_files:
+                    if src_path not in saved_files and src_path not in unsaved_files:
+                        new_files.append((src_path, dest_path))
+                
+                self.update_log(f"在 {folder} 文件夹中找到 {len(all_files)} 个文件，其中 {len(new_files)} 个是新文件\n")
+                
+                if new_files:
+                    # 预览文件
+                    if config['preview_before_copy']:
                         # 使用文件确认对话框
                         try:
-                            dialog = FileConfirmationDialog(self, files_to_copy)
+                            dialog = FileConfirmationDialog(self, new_files)
                             # 显示对话框并等待用户选择
                             result = dialog.exec_()
                             
@@ -320,29 +336,46 @@ class CamSyncApp(QMainWindow):
                                 # 获取用户选中的文件
                                 selected_files = dialog.get_selected_files()
                                 
+                                # 更新已保存和未保存的文件列表
+                                # 已保存的文件是用户选择复制的文件
+                                new_saved_files = saved_files + [src_path for src_path, _ in selected_files]
+                                # 未保存的文件是用户未选择复制的新文件
+                                new_unsaved_files = unsaved_files + [src_path for src_path, _ in new_files if src_path not in [s for s, _ in selected_files]]
+                                
+                                # 将所有文件信息写入配置文件
+                                self.config_manager.update_folder_file_info(device_path, folder, new_saved_files, new_unsaved_files)
+                                self.update_log(f"已将文件状态信息保存到U盘配置文件\n")
+                                
                                 if selected_files:
                                     # 显示文件预览
                                     self.show_file_preview(selected_files)
                                     self.update_log(f"用户选择了 {len(selected_files)} 个文件进行复制\n")
                                     # 开始复制文件
                                     self.file_operations.start_copy_operation(selected_files)
+                                    # 更新上次备份时间
+                                    self.config_manager.update_last_backup_time(device_path, folder)
                                 else:
                                     self.update_log(f"用户未选择任何文件进行复制\n")
                             else:
-                                # 如果用户关闭对话框或点击取消按钮，默认执行取消复制操作
-                                self.update_log(f"用户取消了文件复制操作\n")
+                                # 如果用户取消，将所有新文件标记为未保存
+                                new_unsaved_files = unsaved_files + [src_path for src_path, _ in new_files]
+                                self.config_manager.update_folder_file_info(device_path, folder, saved_files, new_unsaved_files)
+                                self.update_log(f"用户取消了文件复制操作，所有新文件已标记为未保存\n")
                         except Exception as e:
                             self.update_log(f"显示文件确认对话框时发生错误: {str(e)}\n")
                             self.logger.error(f"显示文件确认对话框错误: {str(e)}")
                     else:
-                        self.update_log(f"没有文件需要复制到 {folder}\n")
+                        # 不预览，直接复制所有新文件
+                        self.file_operations.start_copy_operation(new_files)
+                        
+                        # 将所有新文件标记为已保存
+                        new_saved_files = saved_files + [src_path for src_path, _ in new_files]
+                        self.config_manager.update_folder_file_info(device_path, folder, new_saved_files, unsaved_files)
+                        self.update_log(f"已自动复制 {len(new_files)} 个新文件并更新配置\n")
+                        # 更新上次备份时间
+                        self.config_manager.update_last_backup_time(device_path, folder)
                 else:
-                    # 不预览，直接复制
-                    self.file_operations.start_copy_operation_without_preview(
-                        os.path.join(device_path, folder),
-                        os.path.join(self.config_manager.get_backup_path(), folder),
-                        config['backup_strategy'] == 'incremental'
-                    )
+                    self.update_log(f"没有新文件需要复制到 {folder}\n")
             else:
                 self.update_log(f"文件夹 {folder} 配置为不备份\n")
     

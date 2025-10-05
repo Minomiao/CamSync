@@ -35,7 +35,13 @@ coverage.xml
 .env.test.local
 .env.production.local
 
-# 编辑器目录和文件
+# 配置文件和数据
+config/
+logs/
+*.log
+
+# IDE相关目录和文件
+.trae/
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -49,9 +55,16 @@ coverage.xml
 # 操作系统文件
 Thumbs.db
 
-# 日志文件
-logs/
-*.log
+# 可执行文件和批处理脚本
+*.exe
+*.dll
+*.sys
+*.bat
+
+# 临时测试文件
+test.py
+test_device_monitor.py
+test_tray_function.py
 
 # 虚拟环境
 .venv/
@@ -59,9 +72,7 @@ env/
 venv/
 ENV/
 
-# Windows 可执行文件
-*.exe
-*.dll
+# 跨平台编译文件
 *.so
 *.dylib
 

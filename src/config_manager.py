@@ -6,12 +6,12 @@ from datetime import datetime
 
 class ConfigManager:
     def __init__(self):
-        # 配置文件目录
-        self.config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+        # 本地配置文件目录
+        self.local_config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
         # 确保配置目录存在
-        os.makedirs(self.config_dir, exist_ok=True)
+        os.makedirs(self.local_config_dir, exist_ok=True)
         # 主配置文件路径
-        self.main_config_path = os.path.join(self.config_dir, 'main_config.json')
+        self.main_config_path = os.path.join(self.local_config_dir, 'main_config.json')
         # 默认配置
         self.default_config = {
             'backup_path': os.path.join(os.path.expanduser('~'), 'Pictures', 'CamSync'),
@@ -23,6 +23,8 @@ class ConfigManager:
         os.makedirs(self.main_config['backup_path'], exist_ok=True)
         # 日志记录器
         self.logger = logging.getLogger('CamSync')
+        # U盘配置文件名
+        self.USB_CONFIG_FILENAME = 'CamSyncConfig.json'
     
     def load_main_config(self):
         """加载主配置文件"""
@@ -101,11 +103,8 @@ class ConfigManager:
     
     def get_folder_config_path(self, device_path, folder_name):
         """获取文件夹配置文件路径"""
-        # 创建设备唯一标识（使用设备路径的哈希值）
-        device_id = hash(device_path) & 0xFFFFFFFF  # 获取32位哈希值
-        # 配置文件名格式：device_{device_id}_{folder_name}.json
-        config_filename = f'device_{device_id}_{folder_name}.json'
-        return os.path.join(self.config_dir, config_filename)
+        # 配置文件保存在U盘根目录
+        return os.path.join(device_path, self.USB_CONFIG_FILENAME)
     
     def get_folder_config(self, device_path, folder_name):
         """获取文件夹配置"""
@@ -113,21 +112,38 @@ class ConfigManager:
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                return config
+                    config_data = json.load(f)
+                # 从配置数据中获取指定文件夹的配置
+                if folder_name in config_data.get('folders', {}):
+                    return config_data['folders'][folder_name]
+                return None
             except Exception as e:
-                self.logger.error(f"加载文件夹配置文件时发生错误: {str(e)}")
+                self.logger.error(f"加载U盘配置文件时发生错误: {str(e)}")
         return None
     
     def save_folder_config(self, device_path, folder_name, config):
-        """保存文件夹配置"""
+        """保存文件夹配置到U盘"""
         config_path = self.get_folder_config_path(device_path, folder_name)
         try:
+            # 读取现有配置或创建新配置
+            config_data = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            
+            # 确保folders字段存在
+            if 'folders' not in config_data:
+                config_data['folders'] = {}
+            
+            # 更新指定文件夹的配置
+            config_data['folders'][folder_name] = config
+            
+            # 保存配置文件
             with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-            self.logger.info(f"文件夹配置已保存: {folder_name}")
+                json.dump(config_data, f, ensure_ascii=False, indent=4)
+            self.logger.info(f"文件夹配置已保存到U盘: {folder_name}")
         except Exception as e:
-            self.logger.error(f"保存文件夹配置文件时发生错误: {str(e)}")
+            self.logger.error(f"保存U盘配置文件时发生错误: {str(e)}")
     
     def create_default_config(self, device_path, folder_name):
         """创建默认文件夹配置"""
@@ -139,7 +155,9 @@ class ConfigManager:
             'include_subfolders': True,        # 默认为包含子文件夹
             'last_backup_time': None,          # 上次备份时间
             'file_patterns': ['*'],            # 文件匹配模式
-            'exclude_patterns': []             # 排除文件模式
+            'exclude_patterns': [],            # 排除文件模式
+            'saved_files': [],                 # 已保存的文件列表
+            'unsaved_files': []                # 未保存的文件列表
         }
         # 保存配置
         self.save_folder_config(device_path, folder_name, config)
@@ -153,19 +171,20 @@ class ConfigManager:
             self.save_folder_config(device_path, folder_name, config)
     
     def get_all_folder_configs(self):
-        """获取所有文件夹配置"""
-        configs = []
-        try:
-            # 遍历配置目录
-            for filename in os.listdir(self.config_dir):
-                if filename.startswith('device_') and filename.endswith('.json'):
-                    config_path = os.path.join(self.config_dir, filename)
-                    try:
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config = json.load(f)
-                        configs.append(config)
-                    except:
-                        continue
-        except Exception as e:
-            self.logger.error(f"获取所有文件夹配置时发生错误: {str(e)}")
-        return configs
+        """获取所有文件夹配置（注意：现在配置存储在U盘上，此方法不再适用）"""
+        self.logger.warning("get_all_folder_configs 方法不再适用，因为配置现在存储在U盘上")
+        return []
+    
+    def update_folder_file_info(self, device_path, folder_name, saved_files, unsaved_files):
+        """更新文件夹的保存和未保存文件信息"""
+        config = self.get_folder_config(device_path, folder_name)
+        if not config:
+            # 如果配置不存在，创建默认配置
+            config = self.create_default_config(device_path, folder_name)
+        
+        # 更新文件信息
+        config['saved_files'] = saved_files  # 已保存的文件列表
+        config['unsaved_files'] = unsaved_files  # 未保存的文件列表
+        
+        # 保存更新后的配置
+        self.save_folder_config(device_path, folder_name, config)
