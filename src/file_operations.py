@@ -3,7 +3,7 @@ import shutil
 import logging
 import time
 from datetime import datetime
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 
 class FileOperations(QThread):
     # 信号定义

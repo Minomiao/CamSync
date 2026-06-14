@@ -5,7 +5,7 @@ import os
 import win32api
 import win32file
 import win32con
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 
 class DeviceMonitor(QThread):
     # 信号定义

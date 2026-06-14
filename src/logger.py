@@ -29,9 +29,6 @@ def setup_logger():
             encoding='utf-8'
         )
         
-        # 创建控制台处理器
-        console_handler = logging.StreamHandler()
-        
         # 设置日志格式
         log_format = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,11 +37,9 @@ def setup_logger():
         
         # 设置处理器的日志格式
         file_handler.setFormatter(log_format)
-        console_handler.setFormatter(log_format)
         
-        # 添加处理器到日志记录器
+        # 仅添加文件处理器，不在控制台打印日志
         logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
     
     return logger
 

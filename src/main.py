@@ -2,13 +2,14 @@ import sys
 import os
 import logging
 import sys
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                            QHBoxLayout, QPushButton, QLabel, QTextEdit, 
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                            QHBoxLayout, QPushButton, QLabel, 
                             QFileDialog, QMessageBox, QCheckBox, QGroupBox, 
-                            QGridLayout, QTabWidget, QSystemTrayIcon, QMenu, QAction,
-                            QDialog, QScrollArea, QListWidget, QListWidgetItem)
-from PyQt5.QtCore import QThread, pyqtSignal, Qt, QTimer
-from PyQt5.QtGui import QIcon, QFont
+                            QGridLayout, QTabWidget, QSystemTrayIcon, QMenu,
+                            QDialog, QScrollArea, QListWidget, QListWidgetItem, QStyle)
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QUrl
+from PyQt6.QtGui import QIcon, QFont, QAction
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 # 导入其他模块
 from device_monitor import DeviceMonitor
@@ -102,7 +103,7 @@ class FileConfirmationDialog(QDialog):
         # 检查是否所有项都被选中
         all_checked = True
         for i in range(self.file_list.count()):
-            if self.file_list.item(i).checkState() != Qt.Checked:
+            if self.file_list.item(i).checkState() != Qt.CheckState.Checked:
                 all_checked = False
                 break
         
@@ -207,15 +208,24 @@ class CamSyncApp(QMainWindow):
         # 创建日志和信息区域
         tab_widget = QTabWidget()
         
-        # 日志标签页
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        tab_widget.addTab(self.log_text, "操作日志")
+        # 日志标签页 - 使用 QWebEngineView
+        self.log_view = QWebEngineView()
+        self._log_entries = []  # 缓存日志条目
+
+        # CSS 模板
+        self._css = """font-family:'Consolas','Microsoft YaHei',monospace;font-size:13px;
+             background:#1e1e1e;color:#d4d4d4;margin:0;padding:8px;"""
+        self._refresh_log_view()
+        tab_widget.addTab(self.log_view, "操作日志")
         
-        # 文件预览标签页
-        self.file_preview_text = QTextEdit()
-        self.file_preview_text.setReadOnly(True)
-        tab_widget.addTab(self.file_preview_text, "文件预览")
+        # 文件预览标签页 - 使用 QWebEngineView
+        self.file_preview_view = QWebEngineView()
+        self.file_preview_view.setHtml(f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{{{self._css}}}
+        .path{{color:#569cd6;}} .arrow{{color:#6a9955;}} .size{{color:#ce9178;}} .total{{color:#4ec9b0;font-weight:bold;}}
+        pre{{margin:2px 0;white-space:pre-wrap;word-wrap:break-word;}}
+        </style></head><body><div id='preview'></div></body></html>""")
+        tab_widget.addTab(self.file_preview_view, "文件预览")
         
         # 添加所有组件到主布局
         main_layout.addWidget(status_group)
@@ -329,10 +339,10 @@ class CamSyncApp(QMainWindow):
                         try:
                             dialog = FileConfirmationDialog(self, new_files)
                             # 显示对话框并等待用户选择
-                            result = dialog.exec_()
+                            result = dialog.exec()
                             
                             # 如果用户点击确认按钮
-                            if result == QDialog.Accepted:
+                            if result == QDialog.DialogCode.Accepted:
                                 # 获取用户选中的文件
                                 selected_files = dialog.get_selected_files()
                                 
@@ -380,18 +390,27 @@ class CamSyncApp(QMainWindow):
                 self.update_log(f"文件夹 {folder} 配置为不备份\n")
     
     def show_file_preview(self, files_to_copy):
-        # 显示文件预览
-        preview_text = "待复制文件列表:\n\n"
+        # 使用 HTML 渲染文件预览
+        import html as html_mod
+        preview = "待复制文件列表:<br><br>"
         total_size = 0
-        
+
         for src_path, dest_path in files_to_copy:
             size = os.path.getsize(src_path) if os.path.exists(src_path) else 0
             total_size += size
             size_str = self.format_size(size)
-            preview_text += f"{src_path}\n  -> {dest_path}\n  大小: {size_str}\n\n"
-        
-        preview_text += f"总计: {len(files_to_copy)} 个文件，总大小: {self.format_size(total_size)}"
-        self.file_preview_text.setText(preview_text)
+            preview += f"<span class='path'>{html_mod.escape(src_path)}</span><br>"
+            preview += f"  <span class='arrow'>-&gt;</span> {html_mod.escape(dest_path)}<br>"
+            preview += f"  <span class='size'>大小: {size_str}</span><br><br>"
+
+        preview += f"<span class='total'>总计: {len(files_to_copy)} 个文件，总大小: {self.format_size(total_size)}</span>"
+
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{{{self._css}}}
+        .path{{color:#569cd6;}} .arrow{{color:#6a9955;}} .size{{color:#ce9178;}} .total{{color:#4ec9b0;font-weight:bold;}}
+        pre{{margin:2px 0;white-space:pre-wrap;word-wrap:break-word;}}
+        </style></head><body>{preview}</body></html>"""
+        self.file_preview_view.setHtml(html)
         self.update_log(f"显示 {len(files_to_copy)} 个文件的预览\n")
     
     def on_operation_completed(self, result):
@@ -405,13 +424,25 @@ class CamSyncApp(QMainWindow):
             QMessageBox.critical(self, "操作失败", message)
     
     def update_log(self, message):
-        # 更新日志显示
-        self.log_text.append(message)
-        self.log_text.verticalScrollBar().setValue(
-            self.log_text.verticalScrollBar().maximum()
-        )
+        # 缓存日志并通过 setHtml 渲染到 WebEngine 视图（深色主题）
+        import html as html_mod
+        from datetime import datetime
+        t = datetime.now().strftime('%H:%M:%S')
+        msg_escaped = html_mod.escape(message.strip())
+        self._log_entries.append(f'<pre><span class="time">{t}</span> <span class="info">[INFO]</span> {msg_escaped}</pre>')
+        self._refresh_log_view()
         # 同时写入日志文件
         self.logger.info(message.strip())
+
+    def _refresh_log_view(self):
+        """用缓存的日志条目重新渲染日志视图"""
+        entries_html = ''.join(self._log_entries[-500:])  # 最多保留500条
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{{{self._css}}}
+        .info{{color:#6a9955;}} .warn{{color:#ce9178;}} .error{{color:#f44747;}} .time{{color:#569cd6;}}
+        pre{{margin:2px 0;white-space:pre-wrap;word-wrap:break-word;}}
+        </style></head><body>{entries_html}</body></html>"""
+        self.log_view.setHtml(html)
     
     def format_size(self, size_bytes):
         # 格式化文件大小
@@ -431,7 +462,7 @@ class CamSyncApp(QMainWindow):
             self.tray_icon.setIcon(QIcon(icon_path))
         else:
             # 如果SVG图标不存在，使用默认图标
-            self.tray_icon.setIcon(self.style().standardIcon(QApplication.MessageBoxInformation))
+            self.tray_icon.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         
         self.tray_icon.setToolTip('CamSync - 相机文件同步工具')
         
@@ -462,7 +493,7 @@ class CamSyncApp(QMainWindow):
     
     def on_tray_icon_activated(self, reason):
         # 单击或双击托盘图标都显示窗口
-        if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.DoubleClick:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger or reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.show_window()
     
     def show_window(self):
@@ -491,15 +522,15 @@ class CamSyncApp(QMainWindow):
                 msg_box.setInformativeText('选择 "最小化到托盘" 将使程序在后台继续运行。\n选择 "直接关闭程序" 将完全退出应用程序。')
                 
                 # 添加按钮
-                minimize_button = msg_box.addButton('最小化到托盘', QMessageBox.AcceptRole)
-                exit_button = msg_box.addButton('直接关闭程序', QMessageBox.RejectRole)
+                minimize_button = msg_box.addButton('最小化到托盘', QMessageBox.ButtonRole.AcceptRole)
+                exit_button = msg_box.addButton('直接关闭程序', QMessageBox.ButtonRole.RejectRole)
                 
                 # 添加不再询问复选框
                 self.skip_close_dialog_check = QCheckBox("不再询问")
                 msg_box.setCheckBox(self.skip_close_dialog_check)
                 
                 # 显示对话框并获取用户选择
-                msg_box.exec_()
+                msg_box.exec()
                 
                 # 保存用户选择的不再询问设置
                 self.skip_close_dialog = self.skip_close_dialog_check.isChecked()
@@ -560,4 +591,4 @@ if __name__ == '__main__':
     window.show()
     
     # 启动应用程序主循环
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
