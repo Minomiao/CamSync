@@ -164,7 +164,7 @@ class CamSyncApp(QMainWindow):
     def init_ui(self):
         # 设置窗口标题和大小
         self.setWindowTitle('CamSync - 相机文件同步工具')
-        self.setGeometry(100, 100, 900, 600)
+        self.setGeometry(100, 100, 650, 450)
         
         # 创建中央部件
         central_widget = QWidget()
